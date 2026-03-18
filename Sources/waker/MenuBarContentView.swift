@@ -5,7 +5,7 @@ struct MenuBarContentView: View {
     @ObservedObject var state: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             header
             permissionSection
             controlsSection
@@ -13,159 +13,230 @@ struct MenuBarContentView: View {
             windowsSection
             statusSection
         }
-        .padding(16)
-        .frame(width: 380)
+        .padding(14)
+        .frame(width: 420)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Waker")
-                .font(.title3.weight(.semibold))
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Waker")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
 
-            Text("Switch focus between selected windows on a repeating timer.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                Text("Keep selected windows active on a repeating timer.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 8) {
+                statusBadge(
+                    title: state.isRunning ? "Running" : "Ready",
+                    systemImage: state.isRunning ? "bolt.fill" : "pause.fill",
+                    tint: state.isRunning ? .green : .secondary
+                )
+
+                statusBadge(
+                    title: "\(state.selectedWindowCount) selected",
+                    systemImage: "checkmark.circle",
+                    tint: .secondary
+                )
+            }
         }
     }
 
-    @ViewBuilder
     private var permissionSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(
-                    state.accessibilityGranted ? "Accessibility access is enabled" : "Accessibility access is required",
-                    systemImage: state.accessibilityGranted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(state.accessibilityGranted ? .green : .orange)
+        sectionCard {
+            sectionHeader(
+                title: "Permissions",
+                subtitle: state.accessibilityGranted
+                    ? "Waker is allowed to control other apps."
+                    : "Allow Accessibility access so Waker can switch windows and move the cursor.",
+                systemImage: "checkmark.shield"
+            )
 
-                if !state.accessibilityGranted {
-                    Text("macOS must allow Waker to control other apps before it can raise windows. After enabling access, click Refresh Access. If macOS still keeps it locked, use Relaunch Waker.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: state.accessibilityGranted ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                    .font(.title3)
+                    .foregroundStyle(state.accessibilityGranted ? .green : .orange)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill((state.accessibilityGranted ? Color.green : Color.orange).opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(state.accessibilityGranted ? "Accessibility access is enabled" : "Accessibility access is required")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    if !state.accessibilityGranted {
+                        Text("After enabling access in System Settings, click Refresh Access. If macOS still keeps it locked, use Relaunch Waker.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
-                HStack {
-                    Button("Request Access") {
-                        state.requestAccessibilityAccess()
-                    }
+                Spacer(minLength: 0)
+            }
 
-                    Button("Open Settings") {
-                        state.openAccessibilitySettings()
-                    }
-
-                    Button("Refresh Access") {
-                        state.refreshAccessibilityStatus()
-                    }
+            HStack(spacing: 8) {
+                Button("Request Access") {
+                    state.requestAccessibilityAccess()
                 }
 
-                if !state.accessibilityGranted && state.shouldSuggestAccessibilityRelaunch {
-                    HStack {
-                        Button("Relaunch Waker") {
-                            state.relaunchApplication()
-                        }
-                    }
+                Button("Open Settings") {
+                    state.openAccessibilitySettings()
+                }
+
+                Button("Refresh Access") {
+                    state.refreshAccessibilityStatus()
                 }
             }
-        } label: {
-            Text("Permissions")
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            if !state.accessibilityGranted && state.shouldSuggestAccessibilityRelaunch {
+                HStack {
+                    Spacer()
+
+                    Button("Relaunch Waker") {
+                        state.relaunchApplication()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .controlSize(.small)
+                }
+            }
         }
     }
 
     private var controlsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Interval")
-                    Spacer()
-                    Text("\(state.intervalSeconds) sec")
-                        .monospacedDigit()
+        sectionCard {
+            sectionHeader(
+                title: "Loop",
+                subtitle: "Choose how often Waker should switch focus.",
+                systemImage: "arrow.trianglehead.2.clockwise.rotate.90"
+            )
 
-                    Stepper("", value: intervalBinding, in: 1...3_600)
+            configurationRow(title: "Interval", value: "\(state.intervalSeconds) sec") {
+                Stepper("", value: intervalBinding, in: 1...3_600)
                     .labelsHidden()
-                }
-
-                HStack {
-                    Button("Refresh Windows") {
-                        state.refreshWindows()
-                    }
-                    .disabled(!state.accessibilityGranted)
-
-                    Spacer()
-
-                    Button(state.isRunning ? "Stop" : "Start") {
-                        state.toggleRunning()
-                    }
-                    .tint(state.isRunning ? .red : .accentColor)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!state.accessibilityGranted || !state.hasRunnableAutomation)
-                }
-
-                HStack {
-                    Text("\(state.selectedWindowCount) selected")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Button("Select All") {
-                        state.selectAllWindows()
-                    }
-                    .disabled(state.windows.isEmpty)
-
-                    Button("Clear") {
-                        state.clearSelection()
-                    }
-                    .disabled(state.selectedWindowCount == 0)
-                }
             }
-        } label: {
-            Text("Loop")
+
+            HStack(spacing: 8) {
+                Button("Refresh Windows") {
+                    state.refreshWindows()
+                }
+                .disabled(!state.accessibilityGranted)
+
+                Spacer()
+
+                Button("Select All") {
+                    state.selectAllWindows()
+                }
+                .disabled(state.windows.isEmpty)
+
+                Button("Clear") {
+                    state.clearSelection()
+                }
+                .disabled(state.selectedWindowCount == 0)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            HStack(alignment: .center, spacing: 10) {
+                statusBadge(
+                    title: "\(state.selectedWindowCount) window\(state.selectedWindowCount == 1 ? "" : "s")",
+                    systemImage: "macwindow",
+                    tint: .secondary
+                )
+
+                Spacer()
+
+                Button(state.isRunning ? "Stop" : "Start") {
+                    state.toggleRunning()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(state.isRunning ? .red : .accentColor)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!state.accessibilityGranted || !state.hasRunnableAutomation)
+            }
         }
     }
 
     private var mouseSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Simulate mouse movement", isOn: mouseJiggleEnabledBinding)
-                    .toggleStyle(.switch)
-
-                if state.mouseJiggleEnabled {
-                    HStack {
-                        Text("Jiggle Every")
-                        Spacer()
-                        Text("\(state.mouseJiggleIntervalSeconds) sec")
-                            .monospacedDigit()
-
-                        Stepper("", value: mouseJiggleIntervalBinding, in: 1...3_600)
-                            .labelsHidden()
-                    }
-
-                    Text("Moves the cursor a tiny amount and immediately returns it.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        sectionCard {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    sectionHeader(
+                        title: "Mouse",
+                        subtitle: "Optionally reset idle state with a tiny cursor movement.",
+                        systemImage: "cursorarrow.motionlines"
+                    )
                 }
+
+                Spacer(minLength: 12)
+
+                Toggle("", isOn: mouseJiggleEnabledBinding)
+                    .labelsHidden()
             }
-        } label: {
-            Text("Mouse")
+
+            if state.mouseJiggleEnabled {
+                configurationRow(title: "Jiggle Every", value: "\(state.mouseJiggleIntervalSeconds) sec") {
+                    Stepper("", value: mouseJiggleIntervalBinding, in: 1...3_600)
+                        .labelsHidden()
+                }
+
+                Text("Moves the cursor a tiny amount and immediately returns it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private var windowsSection: some View {
-        GroupBox {
+        sectionCard {
+            HStack(alignment: .top, spacing: 12) {
+                sectionHeader(
+                    title: "Windows",
+                    subtitle: "Choose the windows Waker should rotate through.",
+                    systemImage: "macwindow.on.rectangle"
+                )
+
+                Spacer(minLength: 12)
+
+                statusBadge(
+                    title: "\(state.windows.count) available",
+                    systemImage: "list.bullet.rectangle",
+                    tint: .secondary
+                )
+            }
+
             if state.windows.isEmpty {
-                Text("No windows available yet.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("No windows available yet", systemImage: "rectangle.on.rectangle.slash")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Text("Open a few regular app windows, then refresh the list.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(rowBackground(isSelected: false))
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
+                    LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(state.windows) { window in
                             Toggle(isOn: selectionBinding(for: window.id)) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(window.displayTitle)
-                                        .font(.system(size: 13, weight: .medium))
+                                        .font(.system(size: 13, weight: .semibold))
                                         .lineLimit(1)
 
                                     Text(window.appName)
@@ -173,43 +244,53 @@ struct MenuBarContentView: View {
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .toggleStyle(.checkbox)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 9)
+                            .background(rowBackground(isSelected: state.selectedWindowIDs.contains(window.id)))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: 220)
+                .frame(height: 240)
             }
-        } label: {
-            Text("Windows")
         }
     }
 
     private var statusSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(state.statusMessage)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            if let currentWindowLabel = state.currentWindowLabel, state.isRunning {
-                Label("Now focusing: \(currentWindowLabel)", systemImage: "arrow.trianglehead.clockwise")
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(state.statusMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
 
-            Divider()
-
-            HStack {
-                Spacer()
-
-                Button("Quit Waker") {
-                    NSApplication.shared.terminate(nil)
+                if let currentWindowLabel = state.currentWindowLabel, state.isRunning {
+                    Label("Now focusing \(currentWindowLabel)", systemImage: "arrow.trianglehead.clockwise")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
+
+            Spacer(minLength: 12)
+
+            Button("Quit Waker") {
+                NSApplication.shared.terminate(nil)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 
     private var intervalBinding: Binding<Int> {
@@ -249,5 +330,70 @@ struct MenuBarContentView: View {
                 state.toggleSelection(for: windowID, isSelected: isSelected)
             }
         )
+    }
+
+    private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12, content: content)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+    }
+
+    private func sectionHeader(title: String, subtitle: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func configurationRow<Content: View>(title: String, value: String, @ViewBuilder control: () -> Content) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.subheadline)
+
+            Spacer()
+
+            Text(value)
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            control()
+        }
+    }
+
+    private func statusBadge(title: String, systemImage: String, tint: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(tint.opacity(0.12))
+            )
+    }
+
+    private func rowBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(Color(nsColor: .windowBackgroundColor))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.05),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
     }
 }
